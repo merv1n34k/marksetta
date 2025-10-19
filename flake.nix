@@ -9,8 +9,8 @@
     devShells.${system}.default = pkgs.mkShell {
       buildInputs = with pkgs; [
         pkg-config
-        lua5_1
-        lua51Packages.lux-lua
+        luajit
+        luajitPackages.lux-lua
         lux-cli
       ];
     };
