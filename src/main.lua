@@ -34,7 +34,7 @@ if status then
     local dict = {
         comments = "%-%-",
         settings = "^#@%s*",
-        env = "^%\\"
+        env = "^%\\",
     }
     local chunks = reader.chunk(content, dict)
     for k, v in pairs(chunks) do
