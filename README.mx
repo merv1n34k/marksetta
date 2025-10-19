@@ -1,0 +1,34 @@
+-- This is just a sample of how marksetta should work
+-- This file is ambiguous format, which includes multiple different markup formats, including `tex`, `markdown` and `groff`.
+-- The idea is that marksetta will parse this file into context (text, images, links, etc) and style separately into its internal representation which will give the ability to transform this file into any standard formats, with some loss of styles, depending on the format chosen.
+-- To elaborate on why would anyone be interested in this is that marksetta (partially) replaces snippets, templates and rare file formats into workflow where you write in your own comfort way, with ability to combine (mostly) any markup language and custom useful presets and snippets melted inside `marksetta` config to give you ability to write in easy, comfortable and ambiguous format, which will be automatically converted to common and easily readable desired format(s) in real time, elevating the opportunity to use marksetta as a layer for communication with editor and render engine (i.e. for latex files, which are rather quite descriptive)
+
+#@ output=tex,md,raw -- which formats must be produced
+#@ chunks=true -- process file by chunks or not
+#@ preset=all -- which config use for output render
+#@ priority=tex,md,groff,html -- if the languages have identical style formatting, to which format settings stick to
+#@ ignore=yaml,toml -- which formats regard as raw text
+#@ offset=0 (?) -- render output instantly or by offset, use -1 for not rendering at all, the only way to render will be through the manual command `:MarksettaRender [.]`.
+
+# Marksetta
+
+A very \emph{very} *very* cool file converter, suitable for most applications, which lets you write in whatever-the-hell-you-want way.
+
+$$ x = \infty * \int^y_{x^2} x^{34} dx $$
+
+[lol](https://real.lol)
+
+{path-to-image}(Some *wild* caption)[240px,480px,centered]
+
+And include any files or sources
+
+\include{mybestwork.tex}
+
+## How to install
+
+For now there will be no way to install as this is in its earliest form, without any source
+
+<p> This is <strong>WILD</strong>, don't you agree?</p>
+
+-- As you might see, having option to include any markup format in your file might come in handy, especially if you are copying some things from different sources, which are in different formats.
+-- It goes even cooler. After you've wrote enough text in `.mx` file you might get tired from inconsistent format. No problem! Just run `:MarksettaConvert md` and *et viola!* your file is converted to what format you've chosen to, with losses due to format shift. If you want to save thing which will be lost by converting to different format use `:MarksettaClean md` and it will convert as much things as it could, omitting stuff that isn't convertible to markdown without style losses.

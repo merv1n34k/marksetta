@@ -1,0 +1,19 @@
+package = "marksetta"
+version = "0.0.1alpha"
+lua = ">=5.1"
+
+[description]
+summary = "Ambiguous markup-processor for fast and cozy scientific writing"
+maintainer = "merv1n34k"
+labels = [ "tex", "markup", "converter", "markdown" ]
+license = "MIT"
+
+[dependencies]
+# Add your dependencies here
+# `busted = ">=2.0"`
+
+[run]
+args = [ "src/main.lua" ]
+
+[build]
+type = "builtin"
