@@ -1,0 +1,9 @@
+# Lux package manager
+.lux/
+lua_modules/
+
+# Build artifacts
+dist/
+
+# Output directory
+output/

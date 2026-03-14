@@ -1,65 +1,164 @@
 #!/usr/bin/env lua
 
--- main lua file, invokes two modules to convert files
---
--- First module: get the file and process it
--- to have a separated chunks with labels,
--- indicating what the chunk is about
---
--- Second module: take the chunks form the first module
--- and process them according to rules of conversion
---
--- For now it will work like this:
--- $ texetta mynote.md mynote.tex [-r rules.toml]
---
+-- Marksetta: real-time embedded preprocessor for .mx files
+-- Pipeline: config → import → internal state → filter → export → write
 
--- import required modules
-local reader = require("import")
+local config = require("config")
+local import = require("import")
+local internal = require("internal")
+local export = require("export")
 
 local function log(lvl, msg)
-    print("- [" .. lvl .. "] - " .. msg)
+    io.stderr:write("[" .. lvl .. "] " .. msg .. "\n")
 end
 
--- define default required conditions
-
--- read file and check it to be healthy
-
-local status, content = pcall(reader.import, arg[1])
-
-if status then
-    local settings = reader.get_settings(content)
-    for k, v in pairs(settings) do
-        print(k .. " is " .. v)
-    end
-    local dict = {
-        comments = "%-%-",
-        settings = "^#@%s*",
-        env = "^%\\",
+local function parse_args(args)
+    local opts = {
+        input = nil,
+        outputs = {},
+        verbose = false,
     }
-    local chunks = reader.chunk(content, dict)
-    for k, v in pairs(chunks) do
-        print("for chunk " .. k .. " with " .. #v.content .. " lines with type " .. v.type)
+
+    local i = 1
+    while i <= #args do
+        local a = args[i]
+        if a == "-o" then
+            i = i + 1
+            local spec = args[i]
+            if not spec then
+                log("error", "-o requires format:path argument")
+                os.exit(1)
+            end
+            -- Parse "tex:out.tex" or "md:out.md"
+            local fmt, path = spec:match("^(%w+):(.+)$")
+            if fmt and path then
+                opts.outputs[path] = { format = fmt }
+            else
+                log("error", "invalid -o format, expected format:path (e.g. tex:out.tex)")
+                os.exit(1)
+            end
+        elseif a == "-v" or a == "--verbose" then
+            opts.verbose = true
+        elseif a:sub(1, 1) ~= "-" then
+            opts.input = a
+        else
+            log("error", "unknown option: " .. a)
+            os.exit(1)
+        end
+        i = i + 1
     end
-else
-    log("error", "The file path was incorrect")
-    os.exit(1)
+
+    return opts
 end
---print(content)
 
--- parse settings (if present) and apply
--- them if they are healthy
+local function parse_output_spec(spec)
+    -- Parse shorthand: "tex{text,math,env:*}" → { format = "tex", include = {"text","math","env:*"} }
+    local fmt, flavors_str = spec:match("^(%w+){(.+)}$")
+    if fmt and flavors_str then
+        local include = {}
+        for flav in flavors_str:gmatch("[^,]+") do
+            include[#include + 1] = flav:match("^%s*(.-)%s*$")
+        end
+        return { format = fmt, include = include }
+    end
+    -- Plain format name → include all
+    return { format = spec, include = { "*" } }
+end
 
--- check db health (according to settings)
+local function atomic_write(path, content)
+    local tmp = path .. ".tmp." .. os.time()
+    local f = assert(io.open(tmp, "w"))
+    f:write(content)
+    f:close()
+    os.rename(tmp, path)
+end
 
--- chunk file and make chunk annotations
--- make subchunks annotations to sped up processing
+local function main()
+    local cli = parse_args(arg or {})
 
--- process each chunk accordingly (to annotation)
+    if not cli.input then
+        log("error", "usage: marksetta <input.mx> [-o format:path] [-v]")
+        os.exit(1)
+    end
 
--- -- -- -- -- --
--- Parse all file elements and record them to db
---
+    -- 1. Load config
+    local cfg = config.load({ no_file = false })
 
--- print them (debug)
---
--- convert them according to writer and reader values
+    -- 2. Build output table: CLI overrides > config > defaults
+    local outputs = {}
+    if next(cli.outputs) then
+        -- CLI -o flags take precedence
+        for path, out in pairs(cli.outputs) do
+            outputs[path] = { format = out.format, include = { "*" } }
+        end
+    else
+        -- From config
+        for path, spec in pairs(cfg.outputs) do
+            if type(spec) == "string" then
+                outputs[path] = parse_output_spec(spec)
+            elseif type(spec) == "table" then
+                outputs[path] = spec
+            end
+        end
+    end
+
+    -- If no outputs defined at all, default to tex on stdout
+    if not next(outputs) then
+        outputs["stdout"] = { format = "tex", include = { "*" } }
+    end
+
+    -- 3. Import: read + parse
+    if cli.verbose then
+        log("info", "reading " .. cli.input)
+    end
+    local result = import.process(cli.input, cfg)
+
+    if cli.verbose then
+        log("info", "parsed " .. #result.chunks .. " chunks")
+        for _, c in ipairs(result.chunks) do
+            log(
+                "debug",
+                string.format(
+                    "  chunk #%d [%s] lines %d-%d (%d chars)",
+                    c.id,
+                    c.flavor,
+                    c.start_line,
+                    c.end_line,
+                    #c.content
+                )
+            )
+        end
+        if next(result.settings) then
+            log("info", "settings:")
+            for k, v in pairs(result.settings) do
+                log("debug", "  " .. k .. " = " .. v)
+            end
+        end
+    end
+
+    -- 4. Create internal state
+    local state = internal.new(result.chunks, result.settings)
+
+    -- 5. For each output: filter + export + write
+    for path, profile in pairs(outputs) do
+        local filtered = internal.filter(state, profile)
+        local format_config = cfg[profile.format] or {}
+
+        if cli.verbose then
+            log("info", string.format("export %s → %s (%d chunks)", profile.format, path, #filtered))
+        end
+
+        local output = export.emit(filtered, profile.format, format_config)
+
+        if path == "stdout" then
+            print(output)
+        else
+            atomic_write(path, output)
+            if cli.verbose then
+                log("info", "wrote " .. path)
+            end
+        end
+    end
+end
+
+main()

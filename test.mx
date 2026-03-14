@@ -1,0 +1,33 @@
+---
+title: Test Document
+author: Marksetta
+---
+#@ output = tex
+#@ preset = all
+-- This is a comment that should be excluded
+
+# Introduction
+
+This is a test document for the Marksetta pipeline.
+It mixes multiple markup formats.
+
+$$
+E = mc^2
+$$
+
+Some more text after math.
+
+```python
+def hello():
+    print("Hello, world!")
+```
+
+\begin{tikz}
+\draw (0,0) -- (1,1);
+\end{tikz}
+
+---
+
+## Conclusion
+
+This is the end of the test document.
