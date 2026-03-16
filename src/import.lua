@@ -91,7 +91,197 @@ local function parse_setting(line)
     return nil
 end
 
-function M.parse(lines, rules)
+-- Scan forward from `start` for literal `close_delim`
+-- Skips escaped chars (\*) unless `verbatim` is true
+-- Returns position after closing delimiter, or nil if not found
+local function scan_for_close(content, start, close_delim, verbatim)
+    local len = #content
+    local dlen = #close_delim
+    local pos = start
+    while pos <= len - dlen + 1 do
+        if not verbatim and content:sub(pos, pos) == "\\" then
+            pos = pos + 2 -- skip escaped char
+        elseif content:sub(pos, pos + dlen - 1) == close_delim then
+            return pos
+        else
+            pos = pos + 1
+        end
+    end
+    return nil
+end
+
+-- Pass 2: character-level scanner for a text segment
+local function scan_inline(content, inline_rules)
+    local children = {}
+    local len = #content
+    local pos = 1
+    local text_start = 1
+
+    local function flush_text(before)
+        if before > text_start then
+            children[#children + 1] = { flavor = "text", content = content:sub(text_start, before - 1) }
+        end
+    end
+
+    while pos <= len do
+        -- Skip escaped characters
+        if content:sub(pos, pos) == "\\" and pos < len then
+            pos = pos + 2
+            goto continue
+        end
+
+        local matched = false
+        for _, rule in ipairs(inline_rules) do
+            if rule.fallback or rule.self_contained then
+                goto next_rule
+            end
+
+            -- Pattern rule (links, etc.)
+            if rule.pattern then
+                local s, e, c1, c2, c3, c4 = content:find(rule.pattern, pos)
+                if s == pos then
+                    flush_text(pos)
+                    local caps = { c1, c2, c3, c4 }
+                    local child = { flavor = rule.flavor, content = c1 or "", captures = {} }
+                    if rule.capture then
+                        for name, idx in pairs(rule.capture) do
+                            if caps[idx] then
+                                child.captures[name] = caps[idx]
+                            end
+                        end
+                        -- Use "text" capture as content if available
+                        if child.captures.text then
+                            child.content = child.captures.text
+                        end
+                    end
+                    children[#children + 1] = child
+                    pos = e + 1
+                    text_start = pos
+                    matched = true
+                    break
+                end
+            end
+
+            -- Start/end delimiter rule
+            if rule.start then
+                local slen = rule._start_len or #rule.start
+                if content:sub(pos, pos + slen - 1) == rule.start then
+                    local inner_start = pos + slen
+                    local close_pos = scan_for_close(content, inner_start, rule["end"], rule.verbatim)
+                    if close_pos then
+                        flush_text(pos)
+                        local elen = rule._end_len or #rule["end"]
+                        children[#children + 1] = {
+                            flavor = rule.flavor,
+                            content = content:sub(inner_start, close_pos - 1),
+                            captures = {},
+                        }
+                        pos = close_pos + elen
+                        text_start = pos
+                        matched = true
+                        break
+                    end
+                end
+            end
+
+            ::next_rule::
+        end
+
+        if not matched then
+            pos = pos + 1
+        end
+
+        ::continue::
+    end
+
+    -- Flush trailing text
+    flush_text(len + 1)
+    return children
+end
+
+-- Two-pass inline refinement for a text chunk
+local function refine_inline(content, inline_rules)
+    -- Collect self_contained line-level rules and character-level rules
+    local line_rules = {}
+    local char_rules = {}
+    for _, rule in ipairs(inline_rules) do
+        if rule.self_contained and rule.patterns then
+            line_rules[#line_rules + 1] = rule
+        else
+            char_rules[#char_rules + 1] = rule
+        end
+    end
+
+    local children = {}
+    local text_lines = {}
+
+    local function flush_text_lines()
+        if #text_lines > 0 then
+            local segment = table.concat(text_lines, "\n")
+            if #char_rules > 0 then
+                local inline_children = scan_inline(segment, char_rules)
+                for _, child in ipairs(inline_children) do
+                    children[#children + 1] = child
+                end
+            else
+                children[#children + 1] = { flavor = "text", content = segment }
+            end
+            text_lines = {}
+        end
+    end
+
+    -- Pass 1: line-level rules (headings)
+    local lines = {}
+    for line in (content .. "\n"):gmatch("([^\n]*)\n") do
+        lines[#lines + 1] = line
+    end
+
+    for _, line in ipairs(lines) do
+        local matched = false
+        for _, rule in ipairs(line_rules) do
+            for _, pat in ipairs(rule._matchers or rule.patterns) do
+                local caps = { line:match(pat) }
+                if #caps > 0 then
+                    flush_text_lines()
+                    local child = { flavor = rule.flavor, content = line, captures = {} }
+                    if rule.capture then
+                        for name, idx in pairs(rule.capture) do
+                            if caps[idx] then
+                                child.captures[name] = caps[idx]
+                            end
+                        end
+                        if child.captures.text then
+                            child.content = child.captures.text
+                        end
+                    end
+                    children[#children + 1] = child
+                    matched = true
+                    break
+                end
+            end
+            if matched then
+                break
+            end
+        end
+        if not matched then
+            text_lines[#text_lines + 1] = line
+        end
+    end
+    flush_text_lines()
+
+    -- If refinement produced nothing useful, return nil
+    if #children == 0 then
+        return nil
+    end
+    -- If only one text child covering everything, no point wrapping
+    if #children == 1 and children[1].flavor == "text" and children[1].content == content then
+        return nil
+    end
+
+    return children
+end
+
+function M.parse(lines, rules, inline_rules)
     local chunks = {}
     local settings = {}
     local chunk_id = 0
@@ -294,12 +484,21 @@ function M.parse(lines, rules)
     end
     flush_text(#lines + 1)
 
+    -- Inline refinement pass
+    if inline_rules and #inline_rules > 0 then
+        for _, chunk in ipairs(chunks) do
+            if chunk.flavor == "text" then
+                chunk.children = refine_inline(chunk.content, inline_rules)
+            end
+        end
+    end
+
     return chunks, settings
 end
 
 function M.process(filepath, cfg)
     local lines = read_lines(filepath)
-    local chunks, settings = M.parse(lines, cfg.rules)
+    local chunks, settings = M.parse(lines, cfg.rules, cfg.inline_rules)
     return { chunks = chunks, settings = settings }
 end
 

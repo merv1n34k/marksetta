@@ -127,6 +127,11 @@ local function main()
                     #c.content
                 )
             )
+            if c.children then
+                for j, child in ipairs(c.children) do
+                    log("debug", string.format("    child #%d [%s] %q", j, child.flavor, child.content))
+                end
+            end
         end
         if next(result.settings) then
             log("info", "settings:")
@@ -148,7 +153,7 @@ local function main()
             log("info", string.format("export %s → %s (%d chunks)", profile.format, path, #filtered))
         end
 
-        local output = export.emit(filtered, profile.format, format_config)
+        local output = export.emit(filtered, profile.format, format_config, cfg.inline_emit)
 
         if path == "stdout" then
             print(output)

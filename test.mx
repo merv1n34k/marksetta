@@ -8,8 +8,8 @@ author: Marksetta
 
 # Introduction
 
-This is a test document for the Marksetta pipeline.
-It mixes multiple markup formats.
+This is a **bold** and *italic* test with `inline code` and $x^2$ math.
+Check [this link](https://example.com) too.
 
 $$
 E = mc^2

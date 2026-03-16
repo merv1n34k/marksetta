@@ -55,6 +55,45 @@ M.defaults = {
             fallback = true,
         },
     },
+    inline_rules = {
+        {
+            flavor = "heading",
+            patterns = { "^(#+)%s+(.+)$" },
+            self_contained = true,
+            capture = { level = 1, text = 2 },
+        },
+        { flavor = "link", pattern = "%[(.-)%]%((.-)%)", capture = { text = 1, url = 2 } },
+        { flavor = "code_inline", start = "`", ["end"] = "`", verbatim = true },
+        { flavor = "bold", start = "**", ["end"] = "**" },
+        { flavor = "italic", start = "*", ["end"] = "*" },
+        { flavor = "math_inline", start = "$", ["end"] = "$" },
+        { flavor = "text", fallback = true },
+    },
+    inline_emit = {
+        tex = {
+            text = "{content}",
+            bold = "\\textbf{{content}}",
+            italic = "\\emph{{content}}",
+            math_inline = "${content}$",
+            code_inline = "\\texttt{{content}}",
+            link = "\\href{{url}}{{content}}",
+            heading = {
+                "\\section{{content}}",
+                "\\subsection{{content}}",
+                "\\subsubsection{{content}}",
+                "\\paragraph{{content}}",
+            },
+        },
+        md = {
+            text = "{content}",
+            bold = "**{content}**",
+            italic = "*{content}*",
+            math_inline = "${content}$",
+            code_inline = "`{content}`",
+            link = "[{content}]({url})",
+            heading = { "# {content}", "## {content}", "### {content}", "#### {content}" },
+        },
+    },
     outputs = {},
     watch = { debounce_ms = 50, neighbors = 1 },
     internal = { include = {} },
@@ -97,7 +136,36 @@ local function deep_merge(base, override)
     return result
 end
 
+local function assign_priorities(rules)
+    local counter = 0
+    for _, rule in ipairs(rules) do
+        if not rule.priority then
+            counter = counter + 1
+            rule.priority = counter
+        else
+            counter = rule.priority
+        end
+    end
+    -- Stable sort by priority
+    local indexed = {}
+    for i, rule in ipairs(rules) do
+        indexed[i] = { idx = i, rule = rule }
+    end
+    table.sort(indexed, function(a, b)
+        if a.rule.priority == b.rule.priority then
+            return a.idx < b.idx
+        end
+        return a.rule.priority < b.rule.priority
+    end)
+    local sorted = {}
+    for i, entry in ipairs(indexed) do
+        sorted[i] = entry.rule
+    end
+    return sorted
+end
+
 local function compile_rules(rules)
+    rules = assign_priorities(rules)
     for _, rule in ipairs(rules) do
         if rule.patterns then
             rule._matchers = {}
@@ -110,6 +178,25 @@ local function compile_rules(rules)
         end
         if rule["end"] then
             rule._end = rule["end"]
+        end
+    end
+    return rules
+end
+
+local function compile_inline_rules(rules)
+    rules = assign_priorities(rules)
+    for _, rule in ipairs(rules) do
+        if rule.start then
+            rule._start_len = #rule.start
+        end
+        if rule["end"] then
+            rule._end_len = #rule["end"]
+        end
+        if rule.patterns then
+            rule._matchers = {}
+            for _, pat in ipairs(rule.patterns) do
+                rule._matchers[#rule._matchers + 1] = pat
+            end
         end
     end
     return rules
@@ -149,7 +236,8 @@ function M.load(opts)
         cfg.outputs = opts.outputs
     end
 
-    compile_rules(cfg.rules)
+    cfg.rules = compile_rules(cfg.rules)
+    cfg.inline_rules = compile_inline_rules(cfg.inline_rules)
 
     return freeze(cfg)
 end
