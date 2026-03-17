@@ -66,6 +66,18 @@ local function build_end_pattern(rule, start_captures)
     end)
 end
 
+local function match_continue(line, rule)
+    if not rule._continue then
+        return false
+    end
+    for _, pat in ipairs(rule._continue) do
+        if line:match(pat) then
+            return true
+        end
+    end
+    return false
+end
+
 local function extract_captures(rule, start_captures)
     if not rule.capture or not start_captures then
         return {}
@@ -362,11 +374,21 @@ function M.parse(lines, rules, inline_rules)
                 abort_block_as_text(i)
                 state = "SEEKING"
                 -- Fall through to reprocess this line in SEEKING mode
-            elseif line:match(block_end_pat) then
+            elseif block_end_pat and line:match(block_end_pat) then
                 -- End delimiter matched — flush block WITHOUT this line
                 flush_block(i)
                 state = "SEEKING"
                 goto continue -- delimiter consumed, do not reprocess
+            elseif block_rule._continue then
+                if match_continue(line, block_rule) then
+                    block_buf[#block_buf + 1] = line
+                    goto continue
+                else
+                    -- Line doesn't match continue — flush block, reprocess line
+                    flush_block(i - 1)
+                    state = "SEEKING"
+                    -- Fall through to SEEKING to reprocess this line
+                end
             else
                 block_buf[#block_buf + 1] = line
                 goto continue
@@ -403,20 +425,29 @@ function M.parse(lines, rules, inline_rules)
                     goto next_rule
                 end
 
-                -- Self-contained rules (hr, etc.)
+                -- Self-contained rules (hr, figure, latex_cmd, etc.)
                 if rule.self_contained then
-                    if match_patterns(line, rule) then
-                        flush_text(i)
-                        chunk_id = chunk_id + 1
-                        chunks[#chunks + 1] = {
-                            id = chunk_id,
-                            flavor = rule.flavor,
-                            content = line,
-                            start_line = i,
-                            end_line = i,
-                            captures = {},
-                        }
-                        matched = true
+                    local matchers = rule._matchers or rule.patterns
+                    if matchers then
+                        for _, pat in ipairs(matchers) do
+                            local caps = { line:match(pat) }
+                            if #caps > 0 then
+                                flush_text(i)
+                                chunk_id = chunk_id + 1
+                                chunks[#chunks + 1] = {
+                                    id = chunk_id,
+                                    flavor = rule.flavor,
+                                    content = line,
+                                    start_line = i,
+                                    end_line = i,
+                                    captures = rule.capture and extract_captures(rule, caps) or {},
+                                }
+                                matched = true
+                                break
+                            end
+                        end
+                    end
+                    if matched then
                         break
                     end
                     goto next_rule
@@ -426,13 +457,34 @@ function M.parse(lines, rules, inline_rules)
                 if rule.start then
                     local caps = match_start(line, rule)
                     if caps and #caps > 0 then
+                        -- Verify: peek forward to confirm end delimiter exists
+                        if rule.verify and rule._end then
+                            local end_pat = build_end_pattern(rule, caps)
+                            local limit = rule.max_size and math.min(i + rule.max_size, #lines) or #lines
+                            local found = false
+                            for j = i + 1, limit do
+                                if lines[j]:match(end_pat) then
+                                    found = true
+                                    break
+                                end
+                            end
+                            if not found then
+                                goto next_rule
+                            end
+                        end
+
                         flush_text(i)
                         block_start = i
                         block_rule = rule
                         block_captures = extract_captures(rule, caps)
-                        block_end_pat = build_end_pattern(rule, caps)
-                        block_buf = {}
+                        block_end_pat = rule._end and build_end_pattern(rule, caps) or nil
                         block_line_count = 0
+                        if rule._continue then
+                            -- Continue-based blocks include start line in content
+                            block_buf = { line }
+                        else
+                            block_buf = {}
+                        end
                         state = "IN_BLOCK"
                         matched = true
                         break

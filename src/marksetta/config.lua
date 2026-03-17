@@ -1,7 +1,7 @@
 -- Config loader: defaults, JSON user config, merge, freeze
 -- Follows F.A.C.E.: E-layer loaded once, cached aggressively
 
-local json = require("json")
+local json = require("marksetta.json")
 
 local M = {}
 
@@ -16,8 +16,8 @@ M.defaults = {
             flavor = "yaml",
             start = "^---$",
             ["end"] = "^---$",
-            context = { position = "start", max_line = 10 },
             max_size = 50,
+            verify = true,
         },
         {
             patterns = { "^%-%-%s", "^%-%-$" },
@@ -46,8 +46,36 @@ M.defaults = {
         },
         {
             flavor = "hr",
-            patterns = { "^---$", "^%*%*%*$", "^___$" },
-            context = { not_at = "start" },
+            patterns = { "^%*%*%*$", "^___$", "^%-%-%-$" },
+            self_contained = true,
+        },
+        {
+            flavor = "table",
+            start = "^|",
+            continue = "^|",
+            max_size = 200,
+        },
+        {
+            flavor = "figure",
+            patterns = { "^!%[(.-)%]%((.-)%)(.*)$" },
+            self_contained = true,
+            capture = { caption = 1, path = 2, opts = 3 },
+        },
+        {
+            flavor = "ulist",
+            start = "^[%-%*]%s+",
+            continue = { "^[%-%*]%s+", "^%s+%S" },
+            max_size = 200,
+        },
+        {
+            flavor = "olist",
+            start = "^%d+[%.%)]%s+",
+            continue = { "^%d+[%.%)]%s+", "^%s+%S" },
+            max_size = 200,
+        },
+        {
+            flavor = "latex_cmd",
+            patterns = { "^\\%a[%a%*]*%s*$" },
             self_contained = true,
         },
         {
@@ -178,6 +206,13 @@ local function compile_rules(rules)
         end
         if rule["end"] then
             rule._end = rule["end"]
+        end
+        if rule.continue then
+            if type(rule.continue) == "string" then
+                rule._continue = { rule.continue }
+            else
+                rule._continue = rule.continue
+            end
         end
     end
     return rules

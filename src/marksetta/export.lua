@@ -215,6 +215,153 @@ tex("yaml", function(chunk, ctx)
     ctx:emit("% --- end yaml ---")
 end)
 
+tex("table", function(chunk, ctx)
+    local rows = {}
+    for line in (chunk.content .. "\n"):gmatch("([^\n]*)\n") do
+        if line ~= "" then
+            rows[#rows + 1] = line
+        end
+    end
+    if #rows < 2 then
+        ctx:emit(chunk.content)
+        return
+    end
+
+    -- Parse cells from a pipe-table row
+    local function parse_row(row)
+        local cells = {}
+        -- Strip leading/trailing pipes and split
+        row = row:match("^|?(.-)%s*|?$") or row
+        for cell in row:gmatch("([^|]+)") do
+            cells[#cells + 1] = cell:match("^%s*(.-)%s*$")
+        end
+        return cells
+    end
+
+    local header = parse_row(rows[1])
+    local ncols = #header
+
+    -- Detect separator row and alignment
+    local aligns = {}
+    local sep_row = rows[2]
+    local sep_cells = parse_row(sep_row)
+    local has_sep = true
+    for _, cell in ipairs(sep_cells) do
+        local trimmed = cell:match("^%s*(.-)%s*$")
+        if not trimmed:match("^:?%-+:?$") then
+            has_sep = false
+            break
+        end
+        if trimmed:match("^:.*:$") then
+            aligns[#aligns + 1] = "c"
+        elseif trimmed:match(":$") then
+            aligns[#aligns + 1] = "r"
+        else
+            aligns[#aligns + 1] = "l"
+        end
+    end
+    if not has_sep then
+        aligns = {}
+        for _ = 1, ncols do
+            aligns[#aligns + 1] = "l"
+        end
+    end
+
+    local col_spec = table.concat(aligns, " ")
+
+    ctx:emit("")
+    ctx:emit("\\begin{tabular}{" .. col_spec .. "}")
+    ctx:emit("\\hline")
+
+    -- Header
+    ctx:emit(table.concat(header, " & ") .. " \\\\ \\hline")
+
+    -- Data rows (skip separator)
+    local data_start = has_sep and 3 or 2
+    for r = data_start, #rows do
+        local cells = parse_row(rows[r])
+        ctx:emit(table.concat(cells, " & ") .. " \\\\")
+    end
+
+    ctx:emit("\\hline")
+    ctx:emit("\\end{tabular}")
+end)
+
+tex("figure", function(chunk, ctx)
+    local cap = chunk.captures.caption or ""
+    local path = chunk.captures.path or ""
+    local opts_str = chunk.captures.opts or ""
+
+    -- Parse {key=value} options or default to width=\textwidth
+    local graphic_opts = "width=\\textwidth"
+    local opt_inner = opts_str:match("{(.-)}")
+    if opt_inner and opt_inner ~= "" then
+        graphic_opts = opt_inner
+    end
+
+    ctx:emit("")
+    ctx:emit("\\begin{figure}[htbp]")
+    ctx:emit("\\centering")
+    ctx:emit("\\includegraphics[" .. graphic_opts .. "]{" .. path .. "}")
+    if cap ~= "" then
+        ctx:emit("\\caption{" .. cap .. "}")
+    end
+    ctx:emit("\\end{figure}")
+end)
+
+tex("ulist", function(chunk, ctx)
+    ctx:emit("")
+    ctx:emit("\\begin{itemize}")
+    local current_item = nil
+    for line in (chunk.content .. "\n"):gmatch("([^\n]*)\n") do
+        local item_text = line:match("^[%-%*]%s+(.+)$")
+        if item_text then
+            if current_item then
+                ctx:emit("\\item " .. current_item)
+            end
+            current_item = item_text
+        elseif current_item then
+            -- Continuation line
+            local cont = line:match("^%s+(.+)$")
+            if cont then
+                current_item = current_item .. " " .. cont
+            end
+        end
+    end
+    if current_item then
+        ctx:emit("\\item " .. current_item)
+    end
+    ctx:emit("\\end{itemize}")
+end)
+
+tex("olist", function(chunk, ctx)
+    ctx:emit("")
+    ctx:emit("\\begin{enumerate}")
+    local current_item = nil
+    for line in (chunk.content .. "\n"):gmatch("([^\n]*)\n") do
+        local item_text = line:match("^%d+[%.%)]%s+(.+)$")
+        if item_text then
+            if current_item then
+                ctx:emit("\\item " .. current_item)
+            end
+            current_item = item_text
+        elseif current_item then
+            local cont = line:match("^%s+(.+)$")
+            if cont then
+                current_item = current_item .. " " .. cont
+            end
+        end
+    end
+    if current_item then
+        ctx:emit("\\item " .. current_item)
+    end
+    ctx:emit("\\end{enumerate}")
+end)
+
+tex("latex_cmd", function(chunk, ctx)
+    ctx:emit(chunk.content)
+end)
+
 ---------------------------------------------------------------------------
 
 local md = M.profile("md")
@@ -261,6 +408,32 @@ md("env:*", function(chunk, ctx)
     ctx:emit(chunk.content)
     ctx:emit("\\end{" .. env_name .. "}")
     ctx:emit("")
+end)
+
+md("table", function(chunk, ctx)
+    ctx:emit(chunk.content)
+    ctx:emit("")
+end)
+
+md("figure", function(chunk, ctx)
+    local cap = chunk.captures.caption or ""
+    local path = chunk.captures.path or ""
+    ctx:emit("![" .. cap .. "](" .. path .. ")")
+    ctx:emit("")
+end)
+
+md("ulist", function(chunk, ctx)
+    ctx:emit(chunk.content)
+    ctx:emit("")
+end)
+
+md("olist", function(chunk, ctx)
+    ctx:emit(chunk.content)
+    ctx:emit("")
+end)
+
+md("latex_cmd", function(chunk, ctx)
+    -- LaTeX commands are skipped in markdown output
 end)
 
 return M

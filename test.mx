@@ -9,7 +9,57 @@ author: Marksetta
 # Introduction
 
 This is a **bold** and *italic* test with `inline code` and $x^2$ math.
-Check [this link](https://example.com) too.
+Check [this link](https://example.com) t how is tis even possiblr
+
+$$
+\frac{\text{hello}} how  is this possible to write a text
+$$
+
+is is even possible how smooth how
+
+how cool is this kets just
+
+## amazing this
+
+for some reason is does not work
+
+    how cool is this
+
+I can literally add
+
+# this is a section how this is amazing!
+
+this is eaxcly what I need!
+
+And it will renders `any` thing I ask *it* to.
+
+we *will* use this project extensively! \noskip 
+
+Seems to be quite harsh
+
+```lolit
+python = the
+best = false
+lua(is_amazing) = true
+```
+
+isn't this amazing!
+
+---
+title: lol
+yaml: "hell yeah"
+---
+
+# Investigation
+
+I have written a code:
+
+```json
+
+LOL = {LOOOOL},
+try to catch metadata
+```
+
 
 $$
 E = mc^2
@@ -27,6 +77,39 @@ def hello():
 \end{tikz}
 
 ---
+
+## Key Enzymes
+
+
+| Test | solution | resutls |
+| ---:| :--------:| :--------:|
+| Non-trivial parseing | PRGM | <1ms overhead |
+| Likevise abprution | Fast-Lookahead | 100GB less use |
+| file | solution | this is the best day of my life |
+
+
+this is very fast and efficiet strategy to play
+
+| Enzyme | Function | Speed |
+|--------|----------|-------|
+| Helicase | Unwinds DNA | 1000 bp/s |
+| Pol III | Synthesizes new strand | 1000 nt/s |
+| Ligase | Joins Okazaki fragments | — |
+
+![Replication fork diagram](figures/replication-fork.png){width=0.8\textwidth}
+
+Steps of replication:
+
+- DNA helicase unwinds the double helix
+- Primase synthesizes RNA primers
+- DNA polymerase III extends
+  the new strand
+
+1. Initiation: RNA polymerase binds promoter
+2. Elongation: mRNA synthesized 5' to 3'
+3. Termination: polymerase releases
+
+\newpage
 
 ## Conclusion
 
