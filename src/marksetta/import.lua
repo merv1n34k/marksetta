@@ -105,7 +105,8 @@ end
 
 -- Scan forward from `start` for literal `close_delim`
 -- Skips escaped chars (\*) unless `verbatim` is true
--- Returns position after closing delimiter, or nil if not found
+-- Non-verbatim delimiters cannot match across line boundaries
+-- Returns position of closing delimiter, or nil if not found
 local function scan_for_close(content, start, close_delim, verbatim)
     local len = #content
     local dlen = #close_delim
@@ -113,6 +114,8 @@ local function scan_for_close(content, start, close_delim, verbatim)
     while pos <= len - dlen + 1 do
         if not verbatim and content:sub(pos, pos) == "\\" then
             pos = pos + 2 -- skip escaped char
+        elseif not verbatim and content:sub(pos, pos) == "\n" then
+            return nil -- non-verbatim delimiters don't cross lines
         elseif content:sub(pos, pos + dlen - 1) == close_delim then
             return pos
         else
@@ -183,11 +186,23 @@ local function scan_inline(content, inline_rules)
                     if close_pos then
                         flush_text(pos)
                         local elen = rule._end_len or #rule["end"]
-                        children[#children + 1] = {
+                        local inner = content:sub(inner_start, close_pos - 1)
+                        local child = {
                             flavor = rule.flavor,
-                            content = content:sub(inner_start, close_pos - 1),
+                            content = inner,
                             captures = {},
                         }
+                        -- Recursively scan inner content for non-verbatim rules
+                        if not rule.verbatim and #inner > 0 then
+                            local inner_children = scan_inline(inner, inline_rules)
+                            -- Only attach if refinement found something beyond plain text
+                            if #inner_children > 1
+                                or (#inner_children == 1 and inner_children[1].flavor ~= "text")
+                            then
+                                child.children = inner_children
+                            end
+                        end
+                        children[#children + 1] = child
                         pos = close_pos + elen
                         text_start = pos
                         matched = true
@@ -538,8 +553,9 @@ function M.parse(lines, rules, inline_rules)
 
     -- Inline refinement pass
     if inline_rules and #inline_rules > 0 then
+        local refine_flavors = { text = true, ulist = true, olist = true, table = true }
         for _, chunk in ipairs(chunks) do
-            if chunk.flavor == "text" then
+            if refine_flavors[chunk.flavor] then
                 chunk.children = refine_inline(chunk.content, inline_rules)
             end
         end

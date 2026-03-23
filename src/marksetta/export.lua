@@ -10,10 +10,17 @@ local M = {}
 
 M._profiles = {}
 
+-- Inline emitter (forward declaration for recursive interpolation)
+local emit_inline
+
 -- Interpolate {content}, {url}, etc. from child data
-local function interpolate(template, child)
+-- If child has nested children, {content} renders them recursively
+local function interpolate(template, child, templates)
     return template:gsub("{(%w+)}", function(key)
         if key == "content" then
+            if child.children then
+                return emit_inline(child.children, templates)
+            end
             return child.content or ""
         end
         return child.captures and child.captures[key] or ""
@@ -21,7 +28,7 @@ local function interpolate(template, child)
 end
 
 -- Inline emitter driven by templates
-local function emit_inline(children, templates)
+function emit_inline(children, templates)
     if not templates then
         return nil
     end
@@ -34,7 +41,7 @@ local function emit_inline(children, templates)
                 local n = level and #level or 1
                 tmpl = tmpl[n] or tmpl[#tmpl]
             end
-            buf[#buf + 1] = interpolate(tmpl, child)
+            buf[#buf + 1] = interpolate(tmpl, child, templates)
         end
     end
     return table.concat(buf)
@@ -45,14 +52,17 @@ end
 -- ctx:inline(children)     — render inline children → string
 -- ctx:lines(content, pfx)  — emit each line with optional prefix
 -- ctx.config               — format-specific config table
+-- ctx.line_count           — current output line counter (1-based)
 local function make_ctx(buf, config, inline_templates)
     local ctx = {
         buf = buf,
         config = config or {},
+        line_count = 0,
     }
 
     function ctx:emit(line)
         self.buf[#self.buf + 1] = line
+        self.line_count = self.line_count + 1
     end
 
     function ctx:inline(children)
@@ -63,6 +73,7 @@ local function make_ctx(buf, config, inline_templates)
         prefix = prefix or ""
         for line in content:gmatch("[^\n]+") do
             self.buf[#self.buf + 1] = prefix .. line
+            self.line_count = self.line_count + 1
         end
     end
 
@@ -114,7 +125,8 @@ function M.profile(format, opts)
 end
 
 -- Generic emit: profile lookup → preamble → handlers → postamble
-function M.emit(chunks, format, format_config, inline_emit)
+-- opts.source_map: when true, returns { output = "...", source_map = {...} }
+function M.emit(chunks, format, format_config, inline_emit, opts)
     local profile = M._profiles[format]
     if not profile then
         error("unknown output format: " .. tostring(format))
@@ -123,19 +135,40 @@ function M.emit(chunks, format, format_config, inline_emit)
     local buf = {}
     local inline_templates = inline_emit and inline_emit[format]
     local ctx = make_ctx(buf, format_config, inline_templates)
+    local want_map = opts and opts.source_map
 
     emit_bookend(profile.preamble, ctx)
+
+    local source_map
+    if want_map then
+        source_map = {}
+    end
 
     for _, chunk in ipairs(chunks) do
         local handler = find_handler(profile.handlers, chunk.flavor)
         if handler then
+            local out_start = ctx.line_count + 1
             handler(chunk, ctx)
+            if want_map then
+                source_map[#source_map + 1] = {
+                    chunk_id = chunk.id,
+                    flavor = chunk.flavor,
+                    src_start = chunk.start_line,
+                    src_end = chunk.end_line,
+                    out_start = out_start,
+                    out_end = ctx.line_count,
+                }
+            end
         end
     end
 
     emit_bookend(profile.postamble, ctx)
 
-    return table.concat(buf, "\n")
+    local output = table.concat(buf, "\n")
+    if want_map then
+        return { output = output, source_map = source_map }
+    end
+    return output
 end
 
 ---------------------------------------------------------------------------
@@ -149,6 +182,7 @@ local tex = M.profile("tex", {
             ctx:emit(cfg.preamble)
         else
             ctx:emit("\\documentclass{" .. (cfg.document_class or "article") .. "}")
+            ctx:emit("\\usepackage{tabularx}")
             if cfg.packages then
                 for _, pkg in ipairs(cfg.packages) do
                     ctx:emit("\\usepackage{" .. pkg .. "}")
@@ -216,8 +250,9 @@ tex("yaml", function(chunk, ctx)
 end)
 
 tex("table", function(chunk, ctx)
+    local content = chunk.children and ctx:inline(chunk.children) or chunk.content
     local rows = {}
-    for line in (chunk.content .. "\n"):gmatch("([^\n]*)\n") do
+    for line in (content .. "\n"):gmatch("([^\n]*)\n") do
         if line ~= "" then
             rows[#rows + 1] = line
         end
@@ -267,10 +302,21 @@ tex("table", function(chunk, ctx)
         end
     end
 
-    local col_spec = table.concat(aligns, " ")
+    -- Build tabularx column spec with X columns
+    local col_parts = {}
+    for _, a in ipairs(aligns) do
+        if a == "c" then
+            col_parts[#col_parts + 1] = ">{\\centering\\arraybackslash}X"
+        elseif a == "r" then
+            col_parts[#col_parts + 1] = ">{\\raggedleft\\arraybackslash}X"
+        else
+            col_parts[#col_parts + 1] = "X"
+        end
+    end
+    local col_spec = table.concat(col_parts, " ")
 
     ctx:emit("")
-    ctx:emit("\\begin{tabular}{" .. col_spec .. "}")
+    ctx:emit("\\begin{tabularx}{\\textwidth}{" .. col_spec .. "}")
     ctx:emit("\\hline")
 
     -- Header
@@ -284,7 +330,7 @@ tex("table", function(chunk, ctx)
     end
 
     ctx:emit("\\hline")
-    ctx:emit("\\end{tabular}")
+    ctx:emit("\\end{tabularx}")
 end)
 
 tex("figure", function(chunk, ctx)
@@ -310,10 +356,11 @@ tex("figure", function(chunk, ctx)
 end)
 
 tex("ulist", function(chunk, ctx)
+    local content = chunk.children and ctx:inline(chunk.children) or chunk.content
     ctx:emit("")
     ctx:emit("\\begin{itemize}")
     local current_item = nil
-    for line in (chunk.content .. "\n"):gmatch("([^\n]*)\n") do
+    for line in (content .. "\n"):gmatch("([^\n]*)\n") do
         local item_text = line:match("^[%-%*]%s+(.+)$")
         if item_text then
             if current_item then
@@ -335,10 +382,11 @@ tex("ulist", function(chunk, ctx)
 end)
 
 tex("olist", function(chunk, ctx)
+    local content = chunk.children and ctx:inline(chunk.children) or chunk.content
     ctx:emit("")
     ctx:emit("\\begin{enumerate}")
     local current_item = nil
-    for line in (chunk.content .. "\n"):gmatch("([^\n]*)\n") do
+    for line in (content .. "\n"):gmatch("([^\n]*)\n") do
         local item_text = line:match("^%d+[%.%)]%s+(.+)$")
         if item_text then
             if current_item then
