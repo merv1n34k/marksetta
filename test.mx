@@ -12,7 +12,7 @@ This is a **bold** and *italic* test with `inline code` and $x^2$ math.
 Check [this link](https://example.com) t how is tis even possiblr
 
 $$
-\frac{\text{hello}} how  is this possible to write a text
+\frac{\text{hello}}
 $$
 
 is is even possible how smooth how
@@ -29,11 +29,17 @@ I can literally add
 
 # this is a section how this is amazing!
 
-this is eaxcly what I need!
+this is eaxcly what I need! how is this amazing L
+
+But what is we form the textl like
+
+| test | more tests | lol |
+| ----| :------: | -----|
+| fireship | thought emp | nilered |
 
 And it will renders `any` thing I ask *it* to.
 
-we *will* use this project extensively! \noskip 
+we *will* use this project extensively! \noskip
 
 Seems to be quite harsh
 
@@ -113,4 +119,5 @@ Steps of replication:
 
 ## Conclusion
 
-This is the end of the test document.
+This is the end of the test document. About 90% of students scored above 50% on the test.
+R&D department spent #42 budget items.

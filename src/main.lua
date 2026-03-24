@@ -3,10 +3,10 @@
 -- Marksetta: real-time embedded preprocessor for .mx files
 -- Pipeline: config → import → internal state → filter → export → write
 
-local config = require("config")
-local import = require("import")
-local internal = require("internal")
-local export = require("export")
+local config = require("marksetta.config")
+local import = require("marksetta.import")
+local internal = require("marksetta.internal")
+local export = require("marksetta.export")
 
 local function log(lvl, msg)
     io.stderr:write("[" .. lvl .. "] " .. msg .. "\n")
@@ -17,6 +17,7 @@ local function parse_args(args)
         input = nil,
         outputs = {},
         verbose = false,
+        watch = false,
     }
 
     local i = 1
@@ -37,6 +38,8 @@ local function parse_args(args)
                 log("error", "invalid -o format, expected format:path (e.g. tex:out.tex)")
                 os.exit(1)
             end
+        elseif a == "-w" or a == "--watch" then
+            opts.watch = true
         elseif a == "-v" or a == "--verbose" then
             opts.verbose = true
         elseif a:sub(1, 1) ~= "-" then
@@ -107,60 +110,119 @@ local function main()
         outputs["stdout"] = { format = "tex", include = { "*" } }
     end
 
-    -- 3. Import: read + parse
-    if cli.verbose then
-        log("info", "reading " .. cli.input)
-    end
-    local result = import.process(cli.input, cfg)
+    -- Run pipeline once
+    local function run_pipeline()
+        local t0 = os.clock()
 
-    if cli.verbose then
-        log("info", "parsed " .. #result.chunks .. " chunks")
-        for _, c in ipairs(result.chunks) do
-            log(
-                "debug",
-                string.format(
-                    "  chunk #%d [%s] lines %d-%d (%d chars)",
-                    c.id,
-                    c.flavor,
-                    c.start_line,
-                    c.end_line,
-                    #c.content
+        -- Import: read + parse
+        local result = import.process(cli.input, cfg)
+
+        if cli.verbose then
+            log("info", "parsed " .. #result.chunks .. " chunks")
+            for _, c in ipairs(result.chunks) do
+                log(
+                    "debug",
+                    string.format(
+                        "  chunk #%d [%s] lines %d-%d (%d chars)",
+                        c.id,
+                        c.flavor,
+                        c.start_line,
+                        c.end_line,
+                        #c.content
+                    )
                 )
-            )
-            if c.children then
-                for j, child in ipairs(c.children) do
-                    log("debug", string.format("    child #%d [%s] %q", j, child.flavor, child.content))
+                if c.children then
+                    for j, child in ipairs(c.children) do
+                        log("debug", string.format("    child #%d [%s] %q", j, child.flavor, child.content))
+                    end
                 end
             end
         end
-        if next(result.settings) then
-            log("info", "settings:")
-            for k, v in pairs(result.settings) do
-                log("debug", "  " .. k .. " = " .. v)
+
+        -- Internal state + export
+        local state = internal.new(result.chunks, result.settings)
+
+        for path, profile in pairs(outputs) do
+            local filtered = internal.filter(state, profile)
+            local format_config = cfg[profile.format] or {}
+            local output = export.emit(filtered, profile.format, format_config, cfg.inline_emit)
+
+            if path == "stdout" then
+                print(output)
+            else
+                atomic_write(path, output)
             end
         end
+
+        local elapsed = (os.clock() - t0) * 1000
+        return elapsed, #result.chunks
     end
 
-    -- 4. Create internal state
-    local state = internal.new(result.chunks, result.settings)
-
-    -- 5. For each output: filter + export + write
-    for path, profile in pairs(outputs) do
-        local filtered = internal.filter(state, profile)
-        local format_config = cfg[profile.format] or {}
-
+    if not cli.watch then
+        -- One-shot mode
         if cli.verbose then
-            log("info", string.format("export %s → %s (%d chunks)", profile.format, path, #filtered))
+            log("info", "reading " .. cli.input)
+        end
+        local elapsed, n = run_pipeline()
+        if cli.verbose then
+            log("info", string.format("done in %.1fms (%d chunks)", elapsed, n))
+        end
+    else
+        -- Watch mode: poll mtime, rerun on change
+        local debounce = (cfg.watch and cfg.watch.debounce_ms or 50) / 1000
+        local poll_interval = debounce
+
+        local function read_file(path)
+            local f = io.open(path, "r")
+            if not f then
+                return nil
+            end
+            local content = f:read("*a")
+            f:close()
+            return content
         end
 
-        local output = export.emit(filtered, profile.format, format_config, cfg.inline_emit)
+        log("info", "watching " .. cli.input .. " (poll " .. math.floor(debounce * 1000) .. "ms)")
+        local out_list = {}
+        for path, profile in pairs(outputs) do
+            out_list[#out_list + 1] = profile.format .. ":" .. path
+        end
+        log("info", "outputs: " .. table.concat(out_list, ", "))
 
-        if path == "stdout" then
-            print(output)
+        -- Initial run
+        local elapsed, n = run_pipeline()
+        log("info", string.format("ready — %d chunks in %.1fms", n, elapsed))
+
+        local last_content = read_file(cli.input)
+
+        -- Set up sleep: prefer ffi usleep, fallback to os.execute
+        local sleep
+        local ffi_ok, ffi = pcall(require, "ffi")
+        if ffi_ok then
+            pcall(ffi.cdef, "int usleep(unsigned int usec);")
+            sleep = function(sec)
+                ffi.C.usleep(math.floor(sec * 1000000))
+            end
         else
-            atomic_write(path, output)
-            if cli.verbose then
-                log("info", "wrote " .. path)
+            sleep = function(sec)
+                os.execute("sleep " .. sec)
+            end
+        end
+
+        while true do
+            sleep(poll_interval)
+
+            local content = read_file(cli.input)
+            if content and content ~= last_content then
+                last_content = content
+                local run_ok, err = pcall(function()
+                    elapsed, n = run_pipeline()
+                end)
+                if run_ok then
+                    log("info", string.format("rebuilt — %d chunks in %.1fms", n, elapsed))
+                else
+                    log("error", tostring(err))
+                end
             end
         end
     end

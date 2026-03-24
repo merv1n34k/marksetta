@@ -1,5 +1,5 @@
 package = "marksetta"
-version = "0.0.1alpha"
+version = "scm"
 lua = ">=5.1"
 
 [description]
@@ -7,6 +7,9 @@ summary = "Ambiguous markup-processor for fast and cozy scientific writing"
 maintainer = "merv1n34k"
 labels = [ "tex", "markup", "converter", "markdown" ]
 license = "MIT"
+
+[source]
+dev = "git+file:///Users/alexeystroganov/.github_projects/marksetta"
 
 [dependencies]
 # Add your dependencies here
@@ -17,3 +20,11 @@ args = [ "src/main.lua" ]
 
 [build]
 type = "builtin"
+
+[build.modules]
+"marksetta" = "src/marksetta/init.lua"
+"marksetta.config" = "src/marksetta/config.lua"
+"marksetta.import" = "src/marksetta/import.lua"
+"marksetta.internal" = "src/marksetta/internal.lua"
+"marksetta.export" = "src/marksetta/export.lua"
+"marksetta.json" = "src/marksetta/json.lua"
