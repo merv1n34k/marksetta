@@ -1,4 +1,3 @@
-#@ output = md
 
 # Marksetta
 
@@ -8,6 +7,7 @@
 
 Write once in `.mx`, get `.tex`, `.md`, and `.yaml` outputs in real-time. Marksetta sits as a hidden layer between your editor and render engine — no context switching, no manual conversion.
 
+
 - Automatic flavor detection (markdown, math, code, YAML, LaTeX environments)
 - Inline markup: **bold**, *italic*, `code`, $math$, [links](https://example.com)
 - LaTeX special character escaping handled at import, not export
@@ -15,15 +15,19 @@ Write once in `.mx`, get `.tex`, `.md`, and `.yaml` outputs in real-time. Markse
 - Source maps for editor integration
 - Watch mode with configurable debounce
 
+
 ## Quick Start
 
 ### Requirements
+
 
 - LuaJIT or Lua 5.1+
 - [Lux](https://github.com/nvim-neorocks/lux) package manager
 - Nix (optional, for reproducible dev shell)
 
+
 ### Install
+
 
 ```bash
 git clone https://github.com/merv1n34k/marksetta.git
@@ -31,7 +35,9 @@ cd marksetta
 lux build
 ```
 
+
 ### Usage
+
 
 ```bash
 # One-shot compile to stdout
@@ -44,9 +50,11 @@ lux run src/main.lua input.mx -o tex:out.tex -o md:out.md
 lux run src/main.lua input.mx -o tex:out.tex -w
 ```
 
+
 ## The .mx Format
 
 An `.mx` file is plain text where chunks are auto-detected by their syntax:
+
 
 ```text
 ---
@@ -67,9 +75,11 @@ $$
 | data 1   | data 2   |
 ```
 
+
 ## Architecture
 
 Marksetta follows the **F.A.C.E.** stability hierarchy:
+
 
 | Layer | Component | Change Rate |
 |-------|-----------|-------------|
@@ -78,9 +88,11 @@ Marksetta follows the **F.A.C.E.** stability hierarchy:
 | A | Appearance (format) | Frequently |
 | F | Focus (style) | Rapidly |
 
+
 The pipeline flows: **import** (chunking and flavor detection) then **internal state** (format-agnostic) then **export** (profile-based rendering).
 
 ## Library Usage
+
 
 ```lua
 local marksetta = require("marksetta")
@@ -97,9 +109,11 @@ print(results.tex)
 print(results.md)
 ```
 
+
 ### Source Maps
 
 Pass `source_map = true` to get chunk-to-output-line mappings:
+
 
 ```lua
 local results = marksetta.compile(lines, {
@@ -109,6 +123,7 @@ local results = marksetta.compile(lines, {
 -- results.tex.output     = compiled string
 -- results.tex.source_map = { { chunk_id, flavor, src_start, src_end, out_start, out_end }, ... }
 ```
+
 
 ## Neovim Integration
 
