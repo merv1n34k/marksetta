@@ -131,4 +131,4 @@ See [marksetta.nvim](https://github.com/merv1n34k/marksetta.nvim) for real-time 
 
 ## License
 
-MIT
+Distributed under the MIT License. See `LICENSE` for more information.
