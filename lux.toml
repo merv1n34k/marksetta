@@ -16,15 +16,15 @@ dev = "git+file:///Users/alexeystroganov/.github_projects/marksetta"
 # `busted = ">=2.0"`
 
 [run]
-args = [ "src/main.lua" ]
+args = [ "lua/main.lua" ]
 
 [build]
 type = "builtin"
 
 [build.modules]
-"marksetta" = "src/marksetta/init.lua"
-"marksetta.config" = "src/marksetta/config.lua"
-"marksetta.import" = "src/marksetta/import.lua"
-"marksetta.internal" = "src/marksetta/internal.lua"
-"marksetta.export" = "src/marksetta/export.lua"
-"marksetta.json" = "src/marksetta/json.lua"
+"marksetta" = "lua/marksetta/init.lua"
+"marksetta.config" = "lua/marksetta/config.lua"
+"marksetta.import" = "lua/marksetta/import.lua"
+"marksetta.internal" = "lua/marksetta/internal.lua"
+"marksetta.export" = "lua/marksetta/export.lua"
+"marksetta.json" = "lua/marksetta/json.lua"
