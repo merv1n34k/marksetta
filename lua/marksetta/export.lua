@@ -188,7 +188,13 @@ local tex = M.profile("tex", {
                     ctx:emit("\\usepackage{" .. pkg .. "}")
                 end
             end
+            -- Extra preamble lines (e.g. \setdefaultlanguage, \setmainfont)
+            -- between \usepackage block and \begin{document}.
+            emit_bookend(cfg.preamble_extra, ctx)
             ctx:emit("\\begin{document}")
+            -- Content emitted at the top of the document body (e.g.
+            -- \tableofcontents, \maketitle).
+            emit_bookend(cfg.body_start, ctx)
         end
     end,
     postamble = function(ctx)
@@ -196,6 +202,9 @@ local tex = M.profile("tex", {
         if cfg.postamble then
             ctx:emit(cfg.postamble)
         else
+            -- Content emitted at the bottom of the document body, just
+            -- before \end{document} (e.g. \appendix, bibliography).
+            emit_bookend(cfg.body_end, ctx)
             ctx:emit("")
             ctx:emit("\\end{document}")
         end
