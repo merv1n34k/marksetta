@@ -86,9 +86,9 @@ M.defaults = {
     inline_rules = {
         {
             flavor = "heading",
-            patterns = { "^(#+)%s+(.+)$" },
+            patterns = { "^(#+)(%*?)%s+(.+)$" },
             self_contained = true,
-            capture = { level = 1, text = 2 },
+            capture = { level = 1, star = 2, text = 3 },
         },
         { flavor = "link", pattern = "%[(.-)%]%((.-)%)", capture = { text = 1, url = 2 } },
         { flavor = "code_inline", start = "`", ["end"] = "`", verbatim = true },
@@ -100,7 +100,7 @@ M.defaults = {
         { flavor = "italic", start = "_", ["end"] = "_" },
         { flavor = "currency", pattern = "(~?)%$(%d[%d,%.]*[%w/^]*)", capture = { prefix = 1, text = 2 } },
         { flavor = "math_inline", start = "$", ["end"] = "$" },
-        { flavor = "tex_special", pattern = "([%%&#%$])" },
+        { flavor = "tex_special", pattern = "([%%&#%$_])" },
         { flavor = "text", fallback = true },
     },
     inline_emit = {
@@ -115,9 +115,9 @@ M.defaults = {
             tex_special = "\\{content}",
             currency = "{prefix}\\${content}",
             heading = {
-                "\n\\section{{content}}\n",
-                "\n\\subsection{{content}}\n",
-                "\n\\subsubsection{{content}}\n",
+                "\n\\section{star}{{content}}\n",
+                "\n\\subsection{star}{{content}}\n",
+                "\n\\subsubsection{star}{{content}}\n",
                 "\n\\paragraph{{content}}\n",
             },
         },
