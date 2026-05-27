@@ -294,7 +294,6 @@ local tex = M.profile("tex", {
         else
             ctx:emit("\\documentclass{" .. (cfg.document_class or "article") .. "}")
             ctx:emit("\\usepackage{tabularx}")
-            ctx:emit("\\usepackage{seqsplit}")
             if cfg.packages then
                 for _, pkg in ipairs(cfg.packages) do
                     ctx:emit("\\usepackage{" .. pkg .. "}")
@@ -363,21 +362,6 @@ tex("env:*", function(chunk, ctx)
     ctx:emit("\\end{" .. env_name .. "}")
 end)
 
--- Wrap any whitespace-free token longer than `threshold` chars in
--- \seqsplit{} so TeX can break it between any pair of characters. Keeps
--- ordinary prose unaffected (short tokens pass through unchanged).
-local function break_long_tokens(s, threshold)
-    threshold = threshold or 25
-    return (
-        s:gsub("%S+", function(token)
-            if #token > threshold then
-                return "\\seqsplit{" .. token .. "}"
-            end
-            return token
-        end)
-    )
-end
-
 tex("table", function(chunk, ctx)
     local content = chunk.children and ctx:inline(chunk.children) or chunk.content
     local rows = {}
@@ -397,7 +381,7 @@ tex("table", function(chunk, ctx)
         -- Strip leading/trailing pipes and split
         row = row:match("^|?(.-)%s*|?$") or row
         for cell in row:gmatch("([^|]+)") do
-            cells[#cells + 1] = break_long_tokens(cell:match("^%s*(.-)%s*$"))
+            cells[#cells + 1] = cell:match("^%s*(.-)%s*$")
         end
         return cells
     end
