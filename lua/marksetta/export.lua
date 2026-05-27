@@ -51,7 +51,7 @@ end
 -- support `.N` indexing; filters `strip` and `join` cover argument unwrap
 -- and verbatim re-emission.
 local function interpolate(template, child, templates)
-    return template:gsub("{([^}]+)}", function(spec)
+    return template:gsub("{([^{}]+)}", function(spec)
         -- spec = key[.N][|filter[:arg]]
         local key, idx_str, filter, farg = spec:match("^([%w_]+)%.?(%d*)|?([%w_]*):?(.*)$")
         if not key then
