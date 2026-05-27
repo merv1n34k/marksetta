@@ -92,6 +92,9 @@ M.defaults = {
         { flavor = "italic", start = "*", ["end"] = "*" },
         { flavor = "italic", start = "_", ["end"] = "_" },
         { flavor = "currency", pattern = "(~?)%$(%d[%d,%.]*[%w/^]*)", capture = { prefix = 1, text = 2 } },
+        -- Single-line display math `$$...$$` must come BEFORE `$...$` so the
+        -- two-char delimiter is matched first.
+        { flavor = "math_display_inline", start = "$$", ["end"] = "$$", verbatim = true },
         { flavor = "math_inline", start = "$", ["end"] = "$", verbatim = true },
         -- Inline LaTeX command: matches `\name*?[opt]*{arg}*` opaquely.
         -- No name validation, no arity check — purely syntactic recognition.
@@ -115,6 +118,7 @@ M.defaults = {
             bold = "\\textbf{{content}}",
             italic = "\\emph{{content}}",
             math_inline = "${content}$",
+            math_display_inline = "\\[{content}\\]",
             code_inline = "\\texttt{{content}}",
             link = "\\href{{url}}{{content}}",
             tex_special = "\\{content}",
@@ -133,6 +137,7 @@ M.defaults = {
             bold = "**{content}**",
             italic = "*{content}*",
             math_inline = "${content}$",
+            math_display_inline = "$${content}$$",
             code_inline = "`{content}`",
             link = "[{content}]({url})",
             tex_special = "{content}",
