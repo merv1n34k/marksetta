@@ -99,7 +99,7 @@ M.defaults = {
         { flavor = "italic", start = "*", ["end"] = "*" },
         { flavor = "italic", start = "_", ["end"] = "_" },
         { flavor = "currency", pattern = "(~?)%$(%d[%d,%.]*[%w/^]*)", capture = { prefix = 1, text = 2 } },
-        { flavor = "math_inline", start = "$", ["end"] = "$" },
+        { flavor = "math_inline", start = "$", ["end"] = "$", verbatim = true },
         { flavor = "tex_special", pattern = "([%%&#%$_])" },
         { flavor = "text", fallback = true },
     },
