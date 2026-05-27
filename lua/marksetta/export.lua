@@ -25,7 +25,28 @@ local function strip_balanced(s)
     return s
 end
 
--- Apply a filter (`strip`, `join`) to a value.
+-- Escape TeX-special characters in content that will reach LaTeX in
+-- text mode (e.g. inside `\texttt{}`). Backslash becomes
+-- \textbackslash{}; the rest just get a leading backslash.
+local function escape_tex(s)
+    if type(s) ~= "string" then
+        return s
+    end
+    return (
+        s:gsub("([\\_%%&#%${}])", {
+            ["\\"] = "\\textbackslash{}",
+            ["_"] = "\\_",
+            ["%"] = "\\%",
+            ["&"] = "\\&",
+            ["#"] = "\\#",
+            ["$"] = "\\$",
+            ["{"] = "\\{",
+            ["}"] = "\\}",
+        })
+    )
+end
+
+-- Apply a filter (`strip`, `join`, `escape_tex`) to a value.
 local function apply_filter(val, filter, arg)
     if filter == "strip" then
         if type(val) == "table" then
@@ -41,6 +62,15 @@ local function apply_filter(val, filter, arg)
             return table.concat(val, arg or "")
         end
         return val
+    elseif filter == "escape_tex" then
+        if type(val) == "table" then
+            local r = {}
+            for i, v in ipairs(val) do
+                r[i] = escape_tex(v)
+            end
+            return r
+        end
+        return escape_tex(val)
     end
     return val
 end
