@@ -279,6 +279,14 @@ local function refine_inline(content, inline_rules)
                         end
                         if child.captures.text then
                             child.content = child.captures.text
+                            -- Re-scan the captured text with character-level inline
+                            -- rules so escape/emphasis/etc. apply inside headings.
+                            if #char_rules > 0 then
+                                local inner = scan_inline(child.content, char_rules)
+                                if #inner > 0 then
+                                    child.children = inner
+                                end
+                            end
                         end
                     end
                     children[#children + 1] = child
