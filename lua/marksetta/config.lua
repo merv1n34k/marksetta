@@ -100,9 +100,9 @@ M.defaults = {
             flavor = "latex_cmd",
             sequence = {
                 { pattern = "\\([%a@]+)", capture = "name" },
-                { pattern = "(%*)",       capture = "star", rep = "?" },
-                { pattern = "(%b[])",     capture = "opts", rep = "*" },
-                { pattern = "(%b{})",     capture = "args", rep = "*" },
+                { pattern = "(%*)", capture = "star", rep = "?" },
+                { pattern = "(%b[])", capture = "opts", rep = "*" },
+                { pattern = "(%b{})", capture = "args", rep = "*" },
             },
         },
         { flavor = "tex_special", pattern = "([%%&#%$_])" },
