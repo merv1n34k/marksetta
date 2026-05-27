@@ -103,16 +103,19 @@ local function parse_setting(line)
     return nil
 end
 
--- Scan forward from `start` for literal `close_delim`
--- Skips escaped chars (\*) unless `verbatim` is true
--- Non-verbatim delimiters cannot match across line boundaries
--- Returns position of closing delimiter, or nil if not found
+-- Scan forward from `start` for literal `close_delim`.
+-- `verbatim` true: skip inner inline scanning, allow crossing newlines.
+-- When the close delimiter contains a TeX-special char (currently `$`),
+-- `\<char>` is auto-treated as a 2-char escape unit even under verbatim,
+-- so `\$` inside `$...$` math doesn't close the rule.
+-- Returns position of closing delimiter, or nil if not found.
 local function scan_for_close(content, start, close_delim, verbatim)
     local len = #content
     local dlen = #close_delim
+    local escape_aware = close_delim:find("%$") ~= nil
     local pos = start
     while pos <= len - dlen + 1 do
-        if not verbatim and content:sub(pos, pos) == "\\" then
+        if (escape_aware or not verbatim) and content:sub(pos, pos) == "\\" then
             pos = pos + 2 -- skip escaped char
         elseif not verbatim and content:sub(pos, pos) == "\n" then
             return nil -- non-verbatim delimiters don't cross lines
