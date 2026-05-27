@@ -13,7 +13,7 @@ M.defaults = {
             internal = true,
         },
         {
-            patterns = { "^%-%-%s", "^%-%-$" },
+            patterns = { "^%-%-%s", "^%-%-$", "^%s*%%" },
             flavor = "comments",
             internal = true,
         },
@@ -93,6 +93,12 @@ M.defaults = {
         { flavor = "italic", start = "_", ["end"] = "_" },
         { flavor = "currency", pattern = "(~?)%$(%d[%d,%.]*[%w/^]*)", capture = { prefix = 1, text = 2 } },
         { flavor = "math_inline", start = "$", ["end"] = "$", verbatim = true },
+        -- Trailing comment: `\s%\s` to end-of-line. Markdown-aware: a literal
+        -- ` % ` sequence (space-percent-space) and everything after it on
+        -- the same line is stripped from both md and tex output. Line-level
+        -- comments (lines whose first non-whitespace char is `%`) are
+        -- consumed by the block-level `comments` rule above.
+        { flavor = "comment_inline", pattern = "%s%%%s[^\n]*" },
         -- Inline LaTeX command: matches `\name*?[opt]*{arg}*` opaquely.
         -- No name validation, no arity check — purely syntactic recognition.
         -- Sub-flavor `latex_cmd:<name>` is set automatically from `name`.

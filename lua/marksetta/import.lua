@@ -171,12 +171,94 @@ local function match_sequence(content, pos, segments)
     return p, captures
 end
 
+-- Derive the trigger chars for an inline rule. Returns nil if the rule
+-- has no inferable trigger (forces it into the always-tried fallback set).
+-- `rule.trigger = "abc"` overrides; otherwise inferred from rule.start /
+-- first segment of rule.sequence / rule.pattern (handles `[...]` classes
+-- and `%X` shortcuts for the common cases).
+local function rule_trigger_chars(rule)
+    if rule.trigger then
+        local set = {}
+        for c in rule.trigger:gmatch(".") do
+            set[c] = true
+        end
+        return set
+    end
+    if rule.start then
+        return { [rule.start:sub(1, 1)] = true }
+    end
+    local pat = rule.pattern
+    if rule.sequence and rule.sequence[1] then
+        pat = rule.sequence[1].pattern
+    end
+    if not pat then
+        return nil
+    end
+    -- Strip a leading capture group `(...)` to look at the pattern inside.
+    if pat:sub(1, 1) == "(" then
+        pat = pat:sub(2)
+    end
+    local first = pat:sub(1, 1)
+    if first == "[" then
+        -- Parse character class up to the matching `]`. Handle `%X` escapes.
+        local set = {}
+        local p = 2
+        while p <= #pat and pat:sub(p, p) ~= "]" do
+            local c = pat:sub(p, p)
+            if c == "%" and p < #pat then
+                set[pat:sub(p + 1, p + 1)] = true
+                p = p + 2
+            else
+                set[c] = true
+                p = p + 1
+            end
+        end
+        return next(set) and set or nil
+    elseif first == "%" and #pat >= 2 then
+        local c = pat:sub(2, 2)
+        if c == "s" then
+            return { [" "] = true, ["\t"] = true, ["\n"] = true, ["\r"] = true, ["\v"] = true, ["\f"] = true }
+        end
+        -- Treat `%X` as literal X (covers `%[`, `%(`, `%$`, etc.)
+        return { [c] = true }
+    elseif first == "\\" then
+        return { ["\\"] = true }
+    elseif first ~= "" and not first:match("[%^%$%*%+%?%-]") then
+        return { [first] = true }
+    end
+    return nil
+end
+
+-- Build per-char dispatch: char → ordered list of rules to try at that pos.
+-- Rules with no trigger fall into `untriggered` and run at every position.
+local function build_inline_dispatch(inline_rules)
+    local by_char = {}
+    local untriggered = {}
+    for _, rule in ipairs(inline_rules) do
+        if not (rule.fallback or rule.self_contained) then
+            local triggers = rule_trigger_chars(rule)
+            if triggers then
+                for c in pairs(triggers) do
+                    by_char[c] = by_char[c] or {}
+                    table.insert(by_char[c], rule)
+                end
+            else
+                table.insert(untriggered, rule)
+            end
+        end
+    end
+    return by_char, untriggered
+end
+
 -- Pass 2: character-level scanner for a text segment
 local function scan_inline(content, inline_rules)
     local children = {}
     local len = #content
     local pos = 1
     local text_start = 1
+
+    local by_char, untriggered = build_inline_dispatch(inline_rules)
+    local has_untriggered = #untriggered > 0
 
     local function flush_text(before)
         if before > text_start then
@@ -186,7 +268,24 @@ local function scan_inline(content, inline_rules)
 
     while pos <= len do
         local matched = false
-        for _, rule in ipairs(inline_rules) do
+        local candidates = by_char[content:sub(pos, pos)]
+        -- Build the per-position rule list: triggered candidates first, then
+        -- untriggered fallback rules. Skip the loop entirely if neither set
+        -- has anything (huge win on plain-text characters).
+        local rules_to_try
+        if candidates and has_untriggered then
+            rules_to_try = {}
+            for _, r in ipairs(candidates) do
+                rules_to_try[#rules_to_try + 1] = r
+            end
+            for _, r in ipairs(untriggered) do
+                rules_to_try[#rules_to_try + 1] = r
+            end
+        else
+            rules_to_try = candidates or untriggered
+        end
+
+        for _, rule in ipairs(rules_to_try) do
             if rule.fallback or rule.self_contained then
                 goto next_rule
             end
