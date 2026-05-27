@@ -196,9 +196,7 @@ local function scan_inline(content, inline_rules)
                         if not rule.verbatim and #inner > 0 then
                             local inner_children = scan_inline(inner, inline_rules)
                             -- Only attach if refinement found something beyond plain text
-                            if #inner_children > 1
-                                or (#inner_children == 1 and inner_children[1].flavor ~= "text")
-                            then
+                            if #inner_children > 1 or (#inner_children == 1 and inner_children[1].flavor ~= "text") then
                                 child.children = inner_children
                             end
                         end
