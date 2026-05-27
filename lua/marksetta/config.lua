@@ -13,13 +13,6 @@ M.defaults = {
             internal = true,
         },
         {
-            flavor = "yaml",
-            start = "^---$",
-            ["end"] = "^---$",
-            max_size = 50,
-            verify = true,
-        },
-        {
             patterns = { "^%-%-%s", "^%-%-$" },
             flavor = "comments",
             internal = true,

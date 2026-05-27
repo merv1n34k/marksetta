@@ -252,24 +252,19 @@ tex("env:*", function(chunk, ctx)
     ctx:emit("\\end{" .. env_name .. "}")
 end)
 
-tex("yaml", function(chunk, ctx)
-    ctx:emit("")
-    ctx:emit("% --- yaml metadata ---")
-    ctx:lines(chunk.content, "% ")
-    ctx:emit("% --- end yaml ---")
-end)
-
 -- Wrap any whitespace-free token longer than `threshold` chars in
 -- \seqsplit{} so TeX can break it between any pair of characters. Keeps
 -- ordinary prose unaffected (short tokens pass through unchanged).
 local function break_long_tokens(s, threshold)
     threshold = threshold or 25
-    return (s:gsub("%S+", function(token)
-        if #token > threshold then
-            return "\\seqsplit{" .. token .. "}"
-        end
-        return token
-    end))
+    return (
+        s:gsub("%S+", function(token)
+            if #token > threshold then
+                return "\\seqsplit{" .. token .. "}"
+            end
+            return token
+        end)
+    )
 end
 
 tex("table", function(chunk, ctx)
@@ -462,13 +457,6 @@ md("code", function(chunk, ctx)
 end)
 
 md("hr", function(chunk, ctx)
-    ctx:emit("---")
-    ctx:emit("")
-end)
-
-md("yaml", function(chunk, ctx)
-    ctx:emit("---")
-    ctx:emit(chunk.content)
     ctx:emit("---")
     ctx:emit("")
 end)
