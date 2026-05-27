@@ -93,6 +93,18 @@ M.defaults = {
         { flavor = "italic", start = "_", ["end"] = "_" },
         { flavor = "currency", pattern = "(~?)%$(%d[%d,%.]*[%w/^]*)", capture = { prefix = 1, text = 2 } },
         { flavor = "math_inline", start = "$", ["end"] = "$", verbatim = true },
+        -- Inline LaTeX command: matches `\name*?[opt]*{arg}*` opaquely.
+        -- No name validation, no arity check — purely syntactic recognition.
+        -- Sub-flavor `latex_cmd:<name>` is set automatically from `name`.
+        {
+            flavor = "latex_cmd",
+            sequence = {
+                { pattern = "\\([%a@]+)", capture = "name" },
+                { pattern = "(%*)",       capture = "star", rep = "?" },
+                { pattern = "(%b[])",     capture = "opts", rep = "*" },
+                { pattern = "(%b{})",     capture = "args", rep = "*" },
+            },
+        },
         { flavor = "tex_special", pattern = "([%%&#%$_])" },
         { flavor = "text", fallback = true },
     },
@@ -107,6 +119,7 @@ M.defaults = {
             link = "\\href{{url}}{{content}}",
             tex_special = "\\{content}",
             currency = "{prefix}\\${content}",
+            ["latex_cmd:*"] = "\\{name}{star}{opts|join}{args|join}",
             heading = {
                 "\n\\section{star}{{content}}\n",
                 "\n\\subsection{star}{{content}}\n",
@@ -124,6 +137,19 @@ M.defaults = {
             link = "[{content}]({url})",
             tex_special = "{content}",
             currency = "{prefix}${content}",
+            -- Verbatim passthrough for any LaTeX command marksetta doesn't
+            -- know a markdown equivalent for. Specific names below override
+            -- this via exact-match lookup priority.
+            ["latex_cmd:*"] = "\\{name}{star}{opts|join}{args|join}",
+            -- Canonical md translations for common commands.
+            ["latex_cmd:textbf"] = "**{args.1|strip}**",
+            ["latex_cmd:emph"] = "*{args.1|strip}*",
+            ["latex_cmd:textit"] = "*{args.1|strip}*",
+            ["latex_cmd:texttt"] = "`{args.1|strip}`",
+            ["latex_cmd:section"] = "\n# {args.1|strip}\n",
+            ["latex_cmd:subsection"] = "\n## {args.1|strip}\n",
+            ["latex_cmd:subsubsection"] = "\n### {args.1|strip}\n",
+            ["latex_cmd:href"] = "[{args.2|strip}]({args.1|strip})",
             heading = { "\n# {content}\n", "\n## {content}\n", "\n### {content}\n", "\n#### {content}\n" },
         },
     },

@@ -13,17 +13,81 @@ M._profiles = {}
 -- Inline emitter (forward declaration for recursive interpolation)
 local emit_inline
 
--- Interpolate {content}, {url}, etc. from child data
--- If child has nested children, {content} renders them recursively
+-- Strip outer balanced delimiters ({ } / [ ] / ( )) from a string.
+local function strip_balanced(s)
+    if type(s) ~= "string" or #s < 2 then
+        return s
+    end
+    local first, last = s:sub(1, 1), s:sub(-1)
+    if (first == "{" and last == "}") or (first == "[" and last == "]") or (first == "(" and last == ")") then
+        return s:sub(2, -2)
+    end
+    return s
+end
+
+-- Apply a filter (`strip`, `join`) to a value.
+local function apply_filter(val, filter, arg)
+    if filter == "strip" then
+        if type(val) == "table" then
+            local r = {}
+            for i, v in ipairs(val) do
+                r[i] = strip_balanced(v)
+            end
+            return r
+        end
+        return strip_balanced(val)
+    elseif filter == "join" then
+        if type(val) == "table" then
+            return table.concat(val, arg or "")
+        end
+        return val
+    end
+    return val
+end
+
+-- Interpolate `{key}`, `{key.N}`, `{key|filter}`, `{key.N|filter:arg}`
+-- placeholders. `{content}` is special: it recurses into child.children or
+-- returns child.content. List captures (rep "*"/"+" in sequence rules)
+-- support `.N` indexing; filters `strip` and `join` cover argument unwrap
+-- and verbatim re-emission.
 local function interpolate(template, child, templates)
-    return template:gsub("{(%w+)}", function(key)
+    return template:gsub("{([^}]+)}", function(spec)
+        -- spec = key[.N][|filter[:arg]]
+        local key, idx_str, filter, farg = spec:match("^([%w_]+)%.?(%d*)|?([%w_]*):?(.*)$")
+        if not key then
+            return ""
+        end
+
+        local val
         if key == "content" then
             if child.children then
-                return emit_inline(child.children, templates)
+                val = emit_inline(child.children, templates)
+            else
+                val = child.content or ""
             end
-            return child.content or ""
+        else
+            val = child.captures and child.captures[key]
         end
-        return child.captures and child.captures[key] or ""
+
+        if val == nil then
+            return ""
+        end
+
+        if idx_str ~= "" then
+            local n = tonumber(idx_str)
+            if type(val) == "table" and n then
+                val = val[n] or ""
+            end
+        end
+
+        if filter ~= "" then
+            val = apply_filter(val, filter, farg ~= "" and farg or nil)
+        end
+
+        if type(val) == "table" then
+            val = table.concat(val, "")
+        end
+        return val or ""
     end)
 end
 
@@ -35,13 +99,30 @@ function emit_inline(children, templates)
     local buf = {}
     for _, child in ipairs(children) do
         local tmpl = templates[child.flavor]
-        if tmpl then
-            if type(tmpl) == "table" then
-                local level = child.captures and child.captures.level
-                local n = level and #level or 1
-                tmpl = tmpl[n] or tmpl[#tmpl]
+        -- Glob fallback for sub-flavored chunks like `latex_cmd:textbf`:
+        -- look for a template key matching `prefix:*`.
+        if not tmpl then
+            for pat, t in pairs(templates) do
+                if type(pat) == "string" and pat:sub(-2) == ":*" then
+                    local prefix = pat:sub(1, -3)
+                    if child.flavor:sub(1, #prefix + 1) == prefix .. ":" then
+                        tmpl = t
+                        break
+                    end
+                end
             end
-            buf[#buf + 1] = interpolate(tmpl, child, templates)
+        end
+        if tmpl then
+            if type(tmpl) == "function" then
+                buf[#buf + 1] = tmpl(child, templates) or ""
+            else
+                if type(tmpl) == "table" then
+                    local level = child.captures and child.captures.level
+                    local n = level and #level or 1
+                    tmpl = tmpl[n] or tmpl[#tmpl]
+                end
+                buf[#buf + 1] = interpolate(tmpl, child, templates)
+            end
         end
     end
     return table.concat(buf)

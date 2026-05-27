@@ -125,6 +125,52 @@ local function scan_for_close(content, start, close_delim, verbatim)
     return nil
 end
 
+-- Try a sequence rule at `pos`. Returns (end_pos, captures) on success or nil.
+-- Each segment is { pattern, capture, rep = nil|"?"|"*"|"+" }. No whitespace
+-- skipped between segments. List captures (rep "*"/"+") accumulate as arrays.
+local function match_sequence(content, pos, segments)
+    local p = pos
+    local captures = {}
+    for _, seg in ipairs(segments) do
+        local rep = seg.rep
+        if rep == nil then
+            local s, e, cap = content:find(seg.pattern, p)
+            if s ~= p then
+                return nil
+            end
+            if seg.capture then
+                captures[seg.capture] = cap
+            end
+            p = e + 1
+        elseif rep == "?" then
+            local s, e, cap = content:find(seg.pattern, p)
+            if s == p then
+                if seg.capture then
+                    captures[seg.capture] = cap
+                end
+                p = e + 1
+            end
+        else -- "*" or "+"
+            local list = {}
+            while true do
+                local s, e, cap = content:find(seg.pattern, p)
+                if s ~= p then
+                    break
+                end
+                list[#list + 1] = cap
+                p = e + 1
+            end
+            if rep == "+" and #list == 0 then
+                return nil
+            end
+            if seg.capture then
+                captures[seg.capture] = list
+            end
+        end
+    end
+    return p, captures
+end
+
 -- Pass 2: character-level scanner for a text segment
 local function scan_inline(content, inline_rules)
     local children = {}
@@ -139,16 +185,28 @@ local function scan_inline(content, inline_rules)
     end
 
     while pos <= len do
-        -- Skip escaped characters
-        if content:sub(pos, pos) == "\\" and pos < len then
-            pos = pos + 2
-            goto continue
-        end
-
         local matched = false
         for _, rule in ipairs(inline_rules) do
             if rule.fallback or rule.self_contained then
                 goto next_rule
+            end
+
+            -- Sequence rule (multi-segment, supports repetition)
+            if rule.sequence then
+                local end_pos, captures = match_sequence(content, pos, rule.sequence)
+                if end_pos then
+                    flush_text(pos)
+                    local name = captures.name
+                    children[#children + 1] = {
+                        flavor = name and (rule.flavor .. ":" .. name) or rule.flavor,
+                        content = name or content:sub(pos, end_pos - 1),
+                        captures = captures,
+                    }
+                    pos = end_pos
+                    text_start = pos
+                    matched = true
+                    break
+                end
             end
 
             -- Pattern rule (links, etc.)
@@ -213,7 +271,14 @@ local function scan_inline(content, inline_rules)
         end
 
         if not matched then
-            pos = pos + 1
+            -- Escape-skip runs only when no rule claimed the position, so
+            -- sequence rules starting with `\` (e.g. latex_cmd) get first
+            -- crack before the escape consumes the backslash.
+            if content:sub(pos, pos) == "\\" and pos < len then
+                pos = pos + 2
+            else
+                pos = pos + 1
+            end
         end
 
         ::continue::
