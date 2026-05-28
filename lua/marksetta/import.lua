@@ -528,6 +528,16 @@ function M.parse(lines, rules, inline_rules)
     local block_line_count = 0
 
     local function flush_text(before_line)
+        -- Drop leading + trailing blank lines from the text run. They
+        -- were separators between this chunk and its neighbours; the
+        -- emit-time separator already provides the visual blank, so
+        -- keeping them causes whitespace to compound on roundtrips.
+        while #text_buf > 0 and text_buf[#text_buf] == "" do
+            text_buf[#text_buf] = nil
+        end
+        while #text_buf > 0 and text_buf[1] == "" do
+            table.remove(text_buf, 1)
+        end
         if #text_buf > 0 then
             chunk_id = chunk_id + 1
             chunks[#chunks + 1] = {

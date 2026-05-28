@@ -172,6 +172,12 @@ local function make_ctx(buf, config, inline_templates)
     }
 
     function ctx:emit(line)
+        -- Collapse a leading blank against an existing trailing blank
+        -- so chunk handlers can freely emit("") for separation without
+        -- compounding blanks across roundtrips.
+        if line == "" and self.buf[#self.buf] == "" then
+            return
+        end
         self.buf[#self.buf + 1] = line
         self.line_count = self.line_count + 1
     end
