@@ -253,6 +253,24 @@ local function build_inline_dispatch(inline_rules)
     return by_char, untriggered
 end
 
+-- Build a Lua pattern character class matching any char that could
+-- trigger an inline rule (plus `\` for the escape-skip path). Used by
+-- scan_inline to jump past runs of plain prose in one `string.find` call
+-- instead of advancing one position at a time.
+local function build_trigger_class(by_char)
+    local parts = { "%\\" } -- include `\` so escape-skip is still reached
+    for c in pairs(by_char) do
+        if c == "%" or c == "^" or c == "]" or c == "-" then
+            parts[#parts + 1] = "%" .. c
+        elseif c == "\\" then
+            -- already added
+        else
+            parts[#parts + 1] = c
+        end
+    end
+    return "[" .. table.concat(parts) .. "]"
+end
+
 -- Pass 2: character-level scanner for a text segment
 local function scan_inline(content, inline_rules)
     local children = {}
@@ -262,6 +280,10 @@ local function scan_inline(content, inline_rules)
 
     local by_char, untriggered = build_inline_dispatch(inline_rules)
     local has_untriggered = #untriggered > 0
+    -- When no rule is untriggered, every "interesting" position is in
+    -- by_char (plus `\` for escape-skip). We can jump past plain runs
+    -- via a single regex hop instead of advancing pos one char at a time.
+    local trigger_class = (not has_untriggered) and build_trigger_class(by_char) or nil
 
     local function flush_text(before)
         if before > text_start then
@@ -270,6 +292,15 @@ local function scan_inline(content, inline_rules)
     end
 
     while pos <= len do
+        -- Fast skip: jump to the next char that might trigger a rule.
+        if trigger_class then
+            local next_trigger = content:find(trigger_class, pos)
+            if not next_trigger then
+                break -- nothing rule-relevant left; remaining text flushed below
+            end
+            pos = next_trigger
+        end
+
         local matched = false
         local candidates = by_char[content:sub(pos, pos)]
         -- Build the per-position rule list: triggered candidates first, then
@@ -717,10 +748,16 @@ function M.parse(lines, rules, inline_rules)
         ::continue::
     end
 
-    -- EOF handling
+    -- EOF handling. Blocks with a `continue` pattern (ulist, olist, table)
+    -- terminate naturally on a non-matching line — EOF is just such a line,
+    -- so flush them as complete blocks. Blocks with an explicit `end`
+    -- delimiter (code, env, math) at EOF are genuinely unclosed → abort.
     if state == "IN_BLOCK" then
-        -- Unclosed block → treat as text
-        abort_block_as_text(#lines + 1)
+        if block_rule["end"] then
+            abort_block_as_text(#lines + 1)
+        else
+            flush_block(#lines)
+        end
     end
     flush_text(#lines + 1)
 
