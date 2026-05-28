@@ -207,13 +207,19 @@ local function find_handler(handlers, flavor)
     return handlers["*"]
 end
 
--- Emit preamble or postamble (string or function)
+-- Emit preamble or postamble. Accepts string, table-of-strings (each
+-- element becomes its own emitted line — convenient for JSON configs
+-- that can't carry literal newlines), or a function.
 local function emit_bookend(bookend, ctx)
     if not bookend then
         return
     end
     if type(bookend) == "function" then
         bookend(ctx)
+    elseif type(bookend) == "table" then
+        for _, line in ipairs(bookend) do
+            ctx:emit(line)
+        end
     else
         ctx:emit(bookend)
     end
