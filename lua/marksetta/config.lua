@@ -91,7 +91,6 @@ M.defaults = {
         { flavor = "bold", start = "__", ["end"] = "__" },
         { flavor = "italic", start = "*", ["end"] = "*" },
         { flavor = "italic", start = "_", ["end"] = "_" },
-        { flavor = "currency", pattern = "(~?)%$(%d[%d,%.]*[%w/^]*)", capture = { prefix = 1, text = 2 } },
         -- Single-line display math `$$...$$` must come BEFORE `$...$` so the
         -- two-char delimiter is matched first.
         { flavor = "math_display_inline", start = "$$", ["end"] = "$$", verbatim = true },
@@ -122,7 +121,6 @@ M.defaults = {
             code_inline = "\\texttt{{content|escape_tex}}",
             link = "\\href{{url}}{{content}}",
             tex_special = "\\{content}",
-            currency = "{prefix}\\${content}",
             ["latex_cmd:*"] = "\\{name}{star}{opts|join}{args|join}",
             heading = {
                 "\n\\section{star}{{content}}\n",
@@ -141,7 +139,6 @@ M.defaults = {
             code_inline = "`{content}`",
             link = "[{content}]({url})",
             tex_special = "{content}",
-            currency = "{prefix}${content}",
             -- Verbatim passthrough for any LaTeX command marksetta doesn't
             -- know a markdown equivalent for. Specific names below override
             -- this via exact-match lookup priority.
